@@ -248,6 +248,37 @@ export default function App() {
         <p>Upload the latest CSV to see forecourts and prices plotted on OpenStreetMap.</p>
       </header>
 
+      {!fileName ? (
+        <section className="download-guide" aria-label="How to download the latest CSV">
+          <h2>Download the latest CSV</h2>
+          <ol>
+            <li>
+              Open the{' '}
+              <a
+                href="https://www.gov.uk/guidance/access-the-latest-fuel-prices-and-forecourt-data-via-api-or-email"
+                target="_blank"
+                rel="noreferrer"
+              >
+                GOV.UK Fuel Finder guidance page
+              </a>{' '}
+              and scroll to “How to access the data”.
+            </li>
+            <li>
+              Under “1. By downloading the CSV file”, grab the CSV with current prices and
+              forecourt details (updated twice a day).
+            </li>
+            <li>
+              If prompted, sign in with a GOV.UK One Login, then return here and upload the
+              downloaded file.
+            </li>
+          </ol>
+          <p className="download-note">
+            Tip: the CSV download lives behind the “Start now” link in the “Before you
+            start” section of the guidance page.
+          </p>
+        </section>
+      ) : null}
+
       <section className="controls">
         <input
           type="file"
