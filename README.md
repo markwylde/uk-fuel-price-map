@@ -9,7 +9,7 @@ A simple web app that displays a map of UK fuel prices using the latest data.
 ```bash
 # clone the repo
 
-git clone <your-repo-url>
+git clone https://github.com/markwylde/uk-fuel-price-map.git
 cd uk-fuel-price-map
 
 # install dependencies

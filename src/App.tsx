@@ -255,7 +255,7 @@ export default function App() {
             <li>
               Open the{' '}
               <a
-                href="https://www.gov.uk/guidance/access-the-latest-fuel-prices-and-forecourt-data-via-api-or-email"
+                href="https://www.developer.fuel-finder.service.gov.uk/access-latest-fuelprices"
                 target="_blank"
                 rel="noreferrer"
               >
