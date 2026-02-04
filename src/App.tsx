@@ -1,27 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import Papa from 'papaparse';
-import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
-import { DivIcon, Icon, LatLngBounds } from 'leaflet';
-
-const markerIcon = new Icon({
-  iconUrl:
-    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  iconRetinaUrl:
-    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  shadowUrl:
-    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
+import { MapContainer, TileLayer, useMap } from 'react-leaflet';
+import * as L from 'leaflet';
+import 'leaflet.markercluster';
 
 const buildPriceIcon = (
   priceLabel: string | null,
   hasPrices: boolean,
   color: string
 ) =>
-  new DivIcon({
+  new L.DivIcon({
     className: 'price-marker',
     html: hasPrices
       ? `<div class="marker-stack"><div class="marker-label" style="background:${color}">${priceLabel ?? ''}</div><div class="marker-dot" style="background:${color}"></div></div>`
@@ -84,6 +72,14 @@ const formatPriceValue = (value: string) => {
   return `£${pounds.toFixed(3)}`;
 };
 
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
 const getDisplayPrice = (prices: Record<string, string>) => {
   const preferred = ['E10', 'E5', 'B7S', 'B7P', 'B10', 'HVO'];
   for (const key of preferred) {
@@ -114,7 +110,7 @@ function FitBounds({ points }: { points: FuelPoint[] }) {
   const bounds = useMemo(() => {
     if (points.length === 0) return null;
     const latLngs = points.map((p) => [p.lat, p.lng] as [number, number]);
-    return new LatLngBounds(latLngs);
+    return new L.LatLngBounds(latLngs);
   }, [points]);
 
   useEffect(() => {
@@ -134,6 +130,152 @@ function MapSizer({ trigger }: { trigger: number }) {
     }, 50);
     return () => window.clearTimeout(id);
   }, [map, trigger]);
+  return null;
+}
+
+const buildPopupHtml = (row: FuelPoint) => {
+  const addressLines = [row.brand, row.address, row.postcode]
+    .filter(Boolean)
+    .map((line) => `<p>${escapeHtml(line)}</p>`)
+    .join('');
+
+  const updatedLine = row.updated
+    ? `<p>Updated: ${escapeHtml(row.updated)}</p>`
+    : '';
+
+  const pricesLine = Object.keys(row.prices).length
+    ? `<p>Prices: ${Object.entries(row.prices)
+        .map(
+          ([key, value]) =>
+            `${escapeHtml(key)}: ${escapeHtml(formatPriceValue(value))}`
+        )
+        .join(' · ')}</p>`
+    : '<p>Prices: not provided</p>';
+
+  return `<div class="popup"><h3>${escapeHtml(
+    row.tradingName
+  )}</h3>${addressLines}${updatedLine}${pricesLine}</div>`;
+};
+
+const clusterGradient = (value: number | null, range: { min: number; max: number } | null) => {
+  if (value === null || !range) {
+    return 'radial-gradient(circle at 30% 30%, #cbd5f5, #64748b)';
+  }
+  const color = priceToColor(value, range.min, range.max);
+  const match = color.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+  if (!match) return `radial-gradient(circle at 30% 30%, ${color}, ${color})`;
+  const hue = Number(match[1]);
+  return `radial-gradient(circle at 30% 30%, hsl(${hue}, 70%, 55%), hsl(${hue}, 70%, 35%))`;
+};
+
+const buildClusterIcon = (
+  avg: number | null,
+  count: number,
+  range: { min: number; max: number } | null
+) => {
+  const avgLabel = Number.isFinite(avg ?? NaN) ? `£${(avg ?? 0).toFixed(2)}` : 'N/A';
+  const background = clusterGradient(avg, range);
+  return new L.DivIcon({
+    html: `<div class="price-cluster" style="background:${background};"><span class="price-cluster__count">${count}</span><span class="price-cluster__price">${avgLabel}</span></div>`,
+    className: 'price-cluster-wrap',
+    iconSize: [54, 54],
+  });
+};
+
+function ClusteredMarkers({
+  rows,
+  priceRange,
+}: {
+  rows: FuelPoint[];
+  priceRange: { min: number; max: number } | null;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    const clusterCutoffZoom = 12;
+    const clusterGroup = (L as any).markerClusterGroup({
+      chunkedLoading: true,
+      removeOutsideVisibleBounds: true,
+      showCoverageOnHover: false,
+      spiderfyOnMaxZoom: true,
+      disableClusteringAtZoom: clusterCutoffZoom,
+      maxClusterRadius: 60,
+      iconCreateFunction: (cluster: any) => {
+        const markers = cluster.getAllChildMarkers();
+        let total = 0;
+        let count = 0;
+        for (const marker of markers) {
+          const value = marker.options.priceValue;
+          if (Number.isFinite(value)) {
+            total += value;
+            count += 1;
+          }
+        }
+        const avg = count ? total / count : null;
+        return buildClusterIcon(avg, cluster.getChildCount(), priceRange);
+      },
+    });
+
+    const detailLayer = L.layerGroup();
+    const detailCache = new Map<string, L.Marker>();
+
+    const createMarker = (row: FuelPoint) => {
+      const color =
+        row.displayPriceValue !== null && priceRange
+          ? priceToColor(row.displayPriceValue, priceRange.min, priceRange.max)
+          : '#16a34a';
+
+      const marker = L.marker([row.lat, row.lng], {
+        icon: buildPriceIcon(row.displayPrice, row.hasPrices, color),
+        riseOnHover: true,
+        title: row.tradingName,
+      }) as L.Marker & { options: { priceValue?: number | null } };
+
+      marker.options.priceValue = row.displayPriceValue;
+      marker.bindPopup(buildPopupHtml(row));
+      return marker;
+    };
+
+    for (const row of rows) {
+      clusterGroup.addLayer(createMarker(row));
+    }
+
+    const updateDetailLayer = () => {
+      const bounds = map.getBounds().pad(0.35);
+      detailLayer.clearLayers();
+      for (const row of rows) {
+        if (!bounds.contains([row.lat, row.lng])) continue;
+        let marker = detailCache.get(row.id);
+        if (!marker) {
+          marker = createMarker(row);
+          detailCache.set(row.id, marker);
+        }
+        detailLayer.addLayer(marker);
+      }
+    };
+
+    const syncLayers = () => {
+      if (map.getZoom() >= clusterCutoffZoom) {
+        if (map.hasLayer(clusterGroup)) map.removeLayer(clusterGroup);
+        if (!map.hasLayer(detailLayer)) map.addLayer(detailLayer);
+        updateDetailLayer();
+      } else {
+        if (map.hasLayer(detailLayer)) map.removeLayer(detailLayer);
+        if (!map.hasLayer(clusterGroup)) map.addLayer(clusterGroup);
+      }
+    };
+
+    map.on('moveend zoomend', syncLayers);
+    syncLayers();
+    return () => {
+      map.off('moveend zoomend', syncLayers);
+      clusterGroup.clearLayers();
+      detailLayer.clearLayers();
+      map.removeLayer(clusterGroup);
+      map.removeLayer(detailLayer);
+    };
+  }, [map, priceRange, rows]);
+
   return null;
 }
 
@@ -319,39 +461,7 @@ export default function App() {
                 setTileCounts((prev) => ({ ...prev, error: prev.error + 1 })),
             }}
           />
-          {rows.map((row) => (
-            <Marker
-              key={row.id}
-              position={[row.lat, row.lng]}
-              icon={buildPriceIcon(
-                row.displayPrice,
-                row.hasPrices,
-                row.displayPriceValue !== null && priceRange
-                  ? priceToColor(row.displayPriceValue, priceRange.min, priceRange.max)
-                  : '#16a34a'
-              )}
-            >
-              <Popup>
-                <div className="popup">
-                  <h3>{row.tradingName}</h3>
-                  <p>{row.brand}</p>
-                  <p>{row.address}</p>
-                  {row.postcode ? <p>{row.postcode}</p> : null}
-                  {row.updated ? <p>Updated: {row.updated}</p> : null}
-                  {Object.keys(row.prices).length ? (
-                    <p>
-                      Prices:{' '}
-                      {Object.entries(row.prices)
-                        .map(([key, value]) => `${key}: ${formatPriceValue(value)}`)
-                        .join(' · ')}
-                    </p>
-                  ) : (
-                    <p>Prices: not provided</p>
-                  )}
-                </div>
-              </Popup>
-            </Marker>
-          ))}
+          {rows.length ? <ClusteredMarkers rows={rows} priceRange={priceRange} /> : null}
           <MapSizer trigger={rows.length} />
           {rows.length ? <FitBounds points={rows} /> : null}
         </MapContainer>

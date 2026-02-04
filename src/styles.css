@@ -199,6 +199,39 @@ input[type="file"] {
   height: 16px;
 }
 
+.price-cluster-wrap {
+  background: transparent;
+  border: none;
+}
+
+.price-cluster {
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 30% 30%, #22c55e, #15803d);
+  border: 3px solid white;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.3);
+  color: white;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.price-cluster__count {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.price-cluster__price {
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0.95;
+}
+
 .leaflet-pane,
 .leaflet-tile-pane,
 .leaflet-map-pane,
