@@ -104,6 +104,38 @@ input[type="file"] {
   background: white;
 }
 
+.fuel-type-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.fuel-type-selector label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1a1a1a;
+}
+
+.fuel-type-selector select {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: white;
+  font-size: 14px;
+  cursor: pointer;
+  min-width: 140px;
+}
+
+.fuel-type-selector select:hover {
+  border-color: rgba(0, 0, 0, 0.3);
+}
+
+.fuel-type-selector select:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 1px;
+}
+
 .stats {
   display: flex;
   flex-wrap: wrap;
