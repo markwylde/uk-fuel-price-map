@@ -80,8 +80,15 @@ const escapeHtml = (value: string) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
-const getDisplayPrice = (prices: Record<string, string>) => {
-  const preferred = ['E10', 'E5', 'B7S', 'B7P', 'B10', 'HVO'];
+type FuelType = 'petrol' | 'diesel';
+
+const fuelTypePreference: Record<FuelType, string[]> = {
+  petrol: ['E10', 'E5'],
+  diesel: ['B7S', 'B7P', 'B10', 'HVO'],
+};
+
+const getDisplayPrice = (prices: Record<string, string>, fuelType: FuelType) => {
+  const preferred = fuelTypePreference[fuelType];
   for (const key of preferred) {
     const value = prices[key];
     if (value) return formatPriceLabel(value);
@@ -89,8 +96,8 @@ const getDisplayPrice = (prices: Record<string, string>) => {
   return null;
 };
 
-const getDisplayPriceValue = (prices: Record<string, string>) => {
-  const preferred = ['E10', 'E5', 'B7S', 'B7P', 'B10', 'HVO'];
+const getDisplayPriceValue = (prices: Record<string, string>, fuelType: FuelType) => {
+  const preferred = fuelTypePreference[fuelType];
   for (const key of preferred) {
     const value = prices[key];
     if (value) return toPounds(value);
@@ -281,7 +288,8 @@ function ClusteredMarkers({
 
 export default function App() {
   const [fileName, setFileName] = useState<string>('');
-  const [rows, setRows] = useState<FuelPoint[]>([]);
+  const [rawRows, setRawRows] = useState<Omit<FuelPoint, 'displayPrice' | 'displayPriceValue'>[]>([]);
+  const [fuelType, setFuelType] = useState<FuelType>('diesel');
   const [parseError, setParseError] = useState<string>('');
   const [tileCounts, setTileCounts] = useState<{ loaded: number; error: number }>({
     loaded: 0,
@@ -336,8 +344,6 @@ export default function App() {
           }
 
           const hasPrices = Object.keys(prices).length > 0;
-          const displayPrice = hasPrices ? getDisplayPrice(prices) : null;
-          const displayPriceValue = hasPrices ? getDisplayPriceValue(prices) : null;
 
           points.push({
             id: row['forecourts.node_id'] || `${lat},${lng}`,
@@ -350,12 +356,10 @@ export default function App() {
             updated,
             prices,
             hasPrices,
-            displayPrice,
-            displayPriceValue,
           });
         }
 
-          setRows(points);
+          setRawRows(points);
         },
         error: (error: Error) => setParseError(error.message),
       });
@@ -363,6 +367,14 @@ export default function App() {
     reader.onerror = () => setParseError('Could not read the file.');
     reader.readAsText(file);
   };
+
+  const rows = useMemo<FuelPoint[]>(() => {
+    return rawRows.map((row) => ({
+      ...row,
+      displayPrice: row.hasPrices ? getDisplayPrice(row.prices, fuelType) : null,
+      displayPriceValue: row.hasPrices ? getDisplayPriceValue(row.prices, fuelType) : null,
+    }));
+  }, [rawRows, fuelType]);
 
   const stats = useMemo(() => {
     if (rows.length === 0) return null;
@@ -432,6 +444,17 @@ export default function App() {
         />
         {fileName ? <span>Loaded: {fileName}</span> : <span>No file selected.</span>}
         {parseError ? <span>Parse error: {parseError}</span> : null}
+        <div className="fuel-type-selector">
+          <label htmlFor="fuel-type">Fuel Type:</label>
+          <select
+            id="fuel-type"
+            value={fuelType}
+            onChange={(e) => setFuelType(e.target.value as FuelType)}
+          >
+            <option value="petrol">Petrol (E10/E5)</option>
+            <option value="diesel">Diesel (B7)</option>
+          </select>
+        </div>
       </section>
 
       {stats ? (
