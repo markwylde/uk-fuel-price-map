@@ -307,7 +307,7 @@ export default function App() {
         setParseError(
           'This file does not look like the CSV (it looks like HTML or has no commas). Please re-download the CSV and try again.'
         );
-        setRows([]);
+        setRawRows([]);
         return;
       }
 
@@ -319,7 +319,7 @@ export default function App() {
             setParseError(results.errors[0].message);
           }
 
-          const points: FuelPoint[] = [];
+          const points: Omit<FuelPoint, 'displayPrice' | 'displayPriceValue'>[] = [];
           for (const row of results.data) {
             const lat = toNumber(row['forecourts.location.latitude'] ?? '');
             const lng = toNumber(row['forecourts.location.longitude'] ?? '');
